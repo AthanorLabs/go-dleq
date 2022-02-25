@@ -3,36 +3,17 @@ package dleq
 import (
 	"crypto/rand"
 	"errors"
+
+	"github.com/noot/go-dleq/types"
 )
 
+type Curve = types.Curve
+type Point = types.Point
+type Scalar = types.Scalar
+
 type Proof struct {
-}
-
-type Scalar interface {
-	Add(Scalar) Scalar
-	Mul(Scalar) Scalar
-	Inverse() Scalar
-	Encode() ([]byte, error)
-	Eq(Scalar) bool
-}
-
-type Point interface {
-	Add(Point) Point
-	Sub(Point) Point
-	ScalarMul(Scalar) Point
-	Encode() ([]byte, error)
-}
-
-type Curve interface {
-	BitSize() uint64
-	BasePoint() Point
-	AltBasePoint() Point
-	NewRandomScalar() Scalar
-	ScalarFrom(uint64) Scalar
-	HashToScalar([]byte) (Scalar, error)
-	HashToCurve([]byte) Point
-	ScalarBaseMul(Scalar) Point
-	ScalarMul(Scalar, Point) Point
+	commitmentA, commitmentB Point
+	ringSig                  *RingSignature
 }
 
 func NewProof(curveA, curveB Curve) (*Proof, error) {
