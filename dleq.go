@@ -3,6 +3,7 @@ package dleq
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 
 	"github.com/noot/go-dleq/types"
 )
@@ -54,7 +55,7 @@ func generateCommitments(curve Curve, x []byte, bits uint64) ([]*Commitment, err
 	commitments := make([]*Commitment, bits)
 
 	// get blinder at i = bits-1
-	zero := curve.ScalarFrom(0)
+	//zero := curve.ScalarFrom(0)
 	two := curve.ScalarFrom(2)
 	currPowerOfTwo := curve.ScalarFrom(1)
 	sum := curve.ScalarFrom(0)
@@ -63,14 +64,19 @@ func generateCommitments(curve Curve, x []byte, bits uint64) ([]*Commitment, err
 		if i == bits-1 {
 			// (2^(n-1))^(-1)
 			currPowerOfTwoInv := currPowerOfTwo.Inverse()
+			fmt.Println(currPowerOfTwo.Encode())
 
 			// set r_(n-1)
 			blinders[i] = currPowerOfTwoInv.Mul(sum)
 
-			sum = sum.Add(blinders[i])
-			if !sum.Eq(zero) {
-				panic("sum of blinders is not zero")
-			}
+			// sanity check - re-add later
+			// lastBlinderTimesPowerOfTwo := blinders[i].Mul(currPowerOfTwo)
+			// sum = sum.Add(lastBlinderTimesPowerOfTwo)
+			// if !sum.IsZero() {
+			// 	b, _ := sum.Encode()
+			// 	fmt.Println(b)
+			// 	panic("sum of blinders is not zero")
+			// }
 		} else {
 			blinders[i] = curve.NewRandomScalar()
 
@@ -82,16 +88,28 @@ func generateCommitments(curve Curve, x []byte, bits uint64) ([]*Commitment, err
 
 			// set 2^(i+1) for next iteration
 			currPowerOfTwo = currPowerOfTwo.Mul(two)
+			if currPowerOfTwo.IsZero() {
+				panic("power of two should not be zero")
+			}
+		}
+
+		if blinders[i].IsZero() {
+			panic("blinder is zero")
 		}
 
 		// generate commitment
 		// b_i * G' + r_i * G
-		b := curve.ScalarFrom(uint64(getBit(x, i)))
+		b := curve.ScalarFrom(uint16(getBit(x, i)))
 		bGp := curve.ScalarBaseMul(b) // TODO: should this actually be the normal basepoint?
 		rG := curve.ScalarMul(blinders[i], curve.AltBasePoint())
+		commitment := bGp.Add(rG)
+		if commitment.IsZero() {
+			panic("commitment should not be zero")
+		}
+
 		commitments[i] = &Commitment{
 			blinder:    blinders[i],
-			commitment: bGp.Add(rG),
+			commitment: commitment,
 		}
 	}
 
@@ -109,13 +127,13 @@ func generateRingSignatures(curveA, curveB Curve, x byte, commitmentA, commitmen
 
 	switch x {
 	case 0:
-		eCurveA1, err := hashToCurve(curveA, commitmentA.commitment, commitmentB.commitment,
+		eCurveA1, err := hashToScalar(curveA, commitmentA.commitment, commitmentB.commitment,
 			j, curveA.BasePoint(), k, curveB.BasePoint())
 		if err != nil {
 			return nil, err
 		}
 
-		eCurveB1, err := hashToCurve(curveB, commitmentA.commitment, commitmentB.commitment,
+		eCurveB1, err := hashToScalar(curveB, commitmentA.commitment, commitmentB.commitment,
 			j, curveA.BasePoint(), k, curveB.BasePoint())
 		if err != nil {
 			return nil, err
@@ -131,13 +149,13 @@ func generateRingSignatures(curveA, curveB Curve, x byte, commitmentA, commitmen
 		A0 := curveA.ScalarMul(a0, curveA.AltBasePoint())
 		B0 := curveB.ScalarMul(b0, curveB.AltBasePoint())
 
-		eCurveA0, err := hashToCurve(curveA, commitmentA.commitment, commitmentB.commitment,
+		eCurveA0, err := hashToScalar(curveA, commitmentA.commitment, commitmentB.commitment,
 			A0.Sub(ecA), B0.Sub(ecB))
 		if err != nil {
 			return nil, err
 		}
 
-		eCurveB0, err := hashToCurve(curveB, commitmentA.commitment, commitmentB.commitment,
+		eCurveB0, err := hashToScalar(curveB, commitmentA.commitment, commitmentB.commitment,
 			A0.Sub(ecA), B0.Sub(ecB))
 		if err != nil {
 			return nil, err
@@ -160,7 +178,7 @@ func generateRingSignatures(curveA, curveB Curve, x byte, commitmentA, commitmen
 	}
 }
 
-func hashToCurve(curve Curve, elements ...interface{}) (Scalar, error) {
+func hashToScalar(curve Curve, elements ...interface{}) (Scalar, error) {
 	preimage := []byte{}
 
 	for _, e := range elements {
