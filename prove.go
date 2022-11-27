@@ -15,34 +15,41 @@ type Scalar = types.Scalar
 // Proof represents a DLEq proof and commitment to the witness.
 type Proof struct {
 	CommitmentA, CommitmentB Point
-	proofs                   []BitProof
-	signatureA, signatureB   Signature
+	proofs                   []bitProof
+	signatureA, signatureB   signature
 }
 
-type Signature struct {
+type signature struct {
 	inner []byte
 }
 
-// BitProof represents the proof for 1 bit of the witness.
-type BitProof struct {
-	commitmentA, commitmentB Commitment
-	ringSig                  *RingSignature
+// bitProof represents the proof for 1 bit of the witness.
+type bitProof struct {
+	commitmentA, commitmentB commitment
+	ringSig                  *ringSignature
 }
 
-type RingSignature struct {
+type commitment struct {
+	blinder    Scalar
+	commitment Point
+}
+
+type ringSignature struct {
 	eCurveA, eCurveB Scalar
 	a0, a1           Scalar
 	b0, b1           Scalar
 }
 
-func NewProof(curveA, curveB Curve) (*Proof, error) {
+// GenerateSecretForCurves generates a secret value that has a corresponding
+// commitment on both curves.
+func GenerateSecretForCurves(curveA, curveB Curve) ([32]byte, error) {
 	bits := min(curveA.BitSize(), curveB.BitSize())
+	return generateRandomBits(bits)
+}
 
-	// generate secret
-	x, err := generateRandomBits(bits)
-	if err != nil {
-		return nil, err
-	}
+// NewProof returns a new proof for the given secret on the given curves.
+func NewProof(curveA, curveB Curve, x [32]byte) (*Proof, error) {
+	bits := min(curveA.BitSize(), curveB.BitSize())
 
 	xA := curveA.ScalarFromBytes(x)
 	xB := curveB.ScalarFromBytes(x)
@@ -70,7 +77,7 @@ func NewProof(curveA, curveB Curve) (*Proof, error) {
 		return nil, err
 	}
 
-	proofs := make([]BitProof, bits)
+	proofs := make([]bitProof, bits)
 
 	for i := 0; i < int(bits); i++ {
 		bit := getBit(x[:], uint64(i))
@@ -79,7 +86,7 @@ func NewProof(curveA, curveB Curve) (*Proof, error) {
 			return nil, err
 		}
 
-		proofs[i] = BitProof{
+		proofs[i] = bitProof{
 			commitmentA: commitmentsA[i],
 			commitmentB: commitmentsB[i],
 			ringSig:     ringSig,
@@ -100,17 +107,17 @@ func NewProof(curveA, curveB Curve) (*Proof, error) {
 		CommitmentA: XA,
 		CommitmentB: XB,
 		proofs:      proofs,
-		signatureA: Signature{
+		signatureA: signature{
 			sigA,
 		},
-		signatureB: Signature{
+		signatureB: signature{
 			sigB,
 		},
 	}, nil
 }
 
 // verifyCommitmentsSum verifies that all the commitments sum to the given point.
-func verifyCommitmentsSum(curve Curve, commitments []Commitment, point Point) error {
+func verifyCommitmentsSum(curve Curve, commitments []commitment, point Point) error {
 	sum := commitments[0].commitment.Copy()
 
 	two := curve.ScalarFrom(2)
@@ -128,17 +135,12 @@ func verifyCommitmentsSum(curve Curve, commitments []Commitment, point Point) er
 	return errors.New("commitments do not sum to given point")
 }
 
-type Commitment struct {
-	blinder    Scalar // TODO: remove?
-	commitment Point
-}
-
 // generate commitments to x for a curve.
 // x is expressed as bits b_0 ... b_n where n == bits.
-func generateCommitments(curve Curve, x []byte, bits uint64) ([]Commitment, error) {
+func generateCommitments(curve Curve, x []byte, bits uint64) ([]commitment, error) {
 	// make n blinders
 	blinders := make([]Scalar, bits)
-	commitments := make([]Commitment, bits)
+	commitments := make([]commitment, bits)
 
 	two := curve.ScalarFrom(2)
 	currPowerOfTwo := curve.ScalarFrom(1)
@@ -184,28 +186,32 @@ func generateCommitments(curve Curve, x []byte, bits uint64) ([]Commitment, erro
 		b := curve.ScalarFrom(uint32(getBit(x, i)))
 		bG := curve.ScalarBaseMul(b)
 		rG := curve.ScalarMul(blinders[i], curve.AltBasePoint())
-		commitment := bG.Add(rG)
-		if commitment.IsZero() {
+		c := bG.Add(rG)
+		if c.IsZero() {
 			panic("commitment should not be zero")
 		}
 
 		// sanity check, can remove later
 		if getBit(x, i) == 0 {
-			if !commitment.Equals(rG) {
+			if !c.Equals(rG) {
 				panic("commitment should be rG if bit isn't set")
 			}
 		}
 
-		commitments[i] = Commitment{
+		commitments[i] = commitment{
 			blinder:    blinders[i],
-			commitment: commitment,
+			commitment: c,
 		}
 	}
 
 	return commitments, nil
 }
 
-func generateRingSignature(curveA, curveB Curve, x byte, commitmentA, commitmentB Commitment) (*RingSignature, error) {
+func generateRingSignature(
+	curveA, curveB Curve,
+	x byte,
+	commitmentA, commitmentB commitment,
+) (*ringSignature, error) {
 	j, k := curveA.NewRandomScalar(), curveB.NewRandomScalar()
 
 	eA, err := hashToScalar(
@@ -256,7 +262,7 @@ func generateRingSignature(curveA, curveB Curve, x byte, commitmentA, commitment
 
 		a1 := j.Add(eA0.Mul(commitmentA.blinder))
 		b1 := k.Add(eB0.Mul(commitmentB.blinder))
-		return &RingSignature{
+		return &ringSignature{
 			eCurveA: eA0,
 			eCurveB: eB0,
 			a0:      a0,
@@ -287,7 +293,7 @@ func generateRingSignature(curveA, curveB Curve, x byte, commitmentA, commitment
 		a0 := j.Add(eA1.Mul(commitmentA.blinder))
 		b0 := k.Add(eB1.Mul(commitmentB.blinder))
 
-		return &RingSignature{
+		return &ringSignature{
 			eCurveA: eA,
 			eCurveB: eB,
 			a0:      a0,

@@ -41,7 +41,9 @@ func TestGenerateRingSignature(t *testing.T) {
 
 func TestProveAndVerify(t *testing.T) {
 	curve := secp256k1.NewCurve()
-	proof, err := NewProof(curve, curve)
+	x, err := GenerateSecretForCurves(curve, curve)
+	require.NoError(t, err)
+	proof, err := NewProof(curve, curve, x)
 	require.NoError(t, err)
 	err = proof.Verify(curve, curve)
 	require.NoError(t, err)

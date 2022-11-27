@@ -5,9 +5,10 @@ import (
 	"fmt"
 )
 
+// Verify verifies the proof is valid against the given curves.
 // TODO: encode curves into proof somehow?
 func (p *Proof) Verify(curveA, curveB Curve) error {
-	commitmentsA := make([]Commitment, len(p.proofs))
+	commitmentsA := make([]commitment, len(p.proofs))
 	for i := range commitmentsA {
 		commitmentsA[i] = p.proofs[i].commitmentA
 	}
@@ -17,7 +18,7 @@ func (p *Proof) Verify(curveA, curveB Curve) error {
 		return fmt.Errorf("failed to verify commitment on curve A: %w", err)
 	}
 
-	commitmentsB := make([]Commitment, len(p.proofs))
+	commitmentsB := make([]commitment, len(p.proofs))
 	for i := range commitmentsB {
 		commitmentsB[i] = p.proofs[i].commitmentB
 	}
