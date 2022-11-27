@@ -3,6 +3,7 @@ module github.com/noot/go-dleq
 go 1.17
 
 require (
+	filippo.io/edwards25519 v1.0.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292

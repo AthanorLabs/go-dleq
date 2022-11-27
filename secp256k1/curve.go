@@ -6,8 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/noot/go-dleq/types"
+
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -94,7 +95,7 @@ func (c *CurveImpl) ScalarFromBytes(b [32]byte) Scalar {
 	}
 }
 
-func (c *CurveImpl) ScalarFrom(in uint32) Scalar {
+func (c *CurveImpl) ScalarFromInt(in uint32) Scalar {
 	s := new(secp256k1.ModNScalar)
 	s.SetInt(in)
 	return &ScalarImpl{
@@ -153,11 +154,7 @@ func (c *CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
 
 	sk := secp256k1.NewPrivateKey(ss.inner)
 	key := sk.ToECDSA()
-	msg, err := p.Encode()
-	if err != nil {
-		return nil, err
-	}
-
+	msg := p.Encode()
 	hash := sha256.Sum256(msg)
 	return ecdsa.SignASN1(rand.Reader, key, hash[:])
 }
@@ -171,11 +168,7 @@ func (c *CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
 	pp.inner.ToAffine()
 	pub := secp256k1.NewPublicKey(&pp.inner.X, &pp.inner.Y)
 
-	msg, err := msgPoint.Encode()
-	if err != nil {
-		return false
-	}
-
+	msg := msgPoint.Encode()
 	hash := sha256.Sum256(msg)
 	return ecdsa.VerifyASN1(pub.ToECDSA(), hash[:], sig)
 }
@@ -237,10 +230,10 @@ func (s *ScalarImpl) Inverse() Scalar {
 	}
 }
 
-func (s *ScalarImpl) Encode() ([]byte, error) {
+func (s *ScalarImpl) Encode() []byte {
 	var b [32]byte
 	s.inner.PutBytes(&b)
-	return b[:], nil
+	return b[:]
 }
 
 func (s *ScalarImpl) Eq(other Scalar) bool {
@@ -316,9 +309,9 @@ func (p *PointImpl) ScalarMul(s Scalar) Point {
 	}
 }
 
-func (p *PointImpl) Encode() ([]byte, error) {
+func (p *PointImpl) Encode() []byte {
 	p.inner.ToAffine()
-	return secp256k1.NewPublicKey(&p.inner.X, &p.inner.Y).SerializeCompressed(), nil
+	return secp256k1.NewPublicKey(&p.inner.X, &p.inner.Y).SerializeCompressed()
 }
 
 func (p *PointImpl) IsZero() bool {

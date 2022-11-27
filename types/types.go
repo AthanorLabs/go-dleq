@@ -5,7 +5,7 @@ type Curve interface {
 	BasePoint() Point
 	AltBasePoint() Point
 	NewRandomScalar() Scalar
-	ScalarFrom(uint32) Scalar
+	ScalarFromInt(uint32) Scalar
 	ScalarFromBytes([32]byte) Scalar
 	HashToScalar([]byte) (Scalar, error)
 	ScalarBaseMul(Scalar) Point
@@ -20,7 +20,7 @@ type Scalar interface {
 	Negate() Scalar
 	Mul(Scalar) Scalar
 	Inverse() Scalar
-	Encode() ([]byte, error)
+	Encode() []byte
 	Eq(Scalar) bool
 	IsZero() bool
 }
@@ -30,7 +30,7 @@ type Point interface {
 	Add(Point) Point
 	Sub(Point) Point
 	ScalarMul(Scalar) Point
-	Encode() ([]byte, error)
+	Encode() []byte
 	IsZero() bool
 	Equals(other Point) bool
 }

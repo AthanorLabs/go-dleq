@@ -120,8 +120,8 @@ func NewProof(curveA, curveB Curve, x [32]byte) (*Proof, error) {
 func verifyCommitmentsSum(curve Curve, commitments []commitment, point Point) error {
 	sum := commitments[0].commitment.Copy()
 
-	two := curve.ScalarFrom(2)
-	currPowerOfTwo := curve.ScalarFrom(2)
+	two := curve.ScalarFromInt(2)
+	currPowerOfTwo := curve.ScalarFromInt(2)
 
 	for _, c := range commitments[1:] {
 		sum = sum.Add(c.commitment.ScalarMul(currPowerOfTwo))
@@ -142,10 +142,10 @@ func generateCommitments(curve Curve, x []byte, bits uint64) ([]commitment, erro
 	blinders := make([]Scalar, bits)
 	commitments := make([]commitment, bits)
 
-	two := curve.ScalarFrom(2)
-	currPowerOfTwo := curve.ScalarFrom(1)
+	two := curve.ScalarFromInt(2)
+	currPowerOfTwo := curve.ScalarFromInt(1)
 
-	sum := curve.ScalarFrom(0)
+	sum := curve.ScalarFromInt(0)
 
 	for i := uint64(0); i < bits; i++ {
 		if i == bits-1 {
@@ -183,7 +183,7 @@ func generateCommitments(curve Curve, x []byte, bits uint64) ([]commitment, erro
 
 		// generate commitment
 		// b_i * G' + r_i * G
-		b := curve.ScalarFrom(uint32(getBit(x, i)))
+		b := curve.ScalarFromInt(uint32(getBit(x, i)))
 		bG := curve.ScalarBaseMul(b)
 		rG := curve.ScalarMul(blinders[i], curve.AltBasePoint())
 		c := bG.Add(rG)
@@ -312,18 +312,10 @@ func hashToScalar(curve Curve, elements ...interface{}) (Scalar, error) {
 	for _, e := range elements {
 		switch el := e.(type) {
 		case Scalar:
-			b, err := el.Encode()
-			if err != nil {
-				return nil, err
-			}
-
+			b := el.Encode()
 			preimage = append(preimage, b...)
 		case Point:
-			b, err := el.Encode()
-			if err != nil {
-				return nil, err
-			}
-
+			b := el.Encode()
 			preimage = append(preimage, b...)
 		default:
 			return nil, errors.New("input element must be scalar or point")

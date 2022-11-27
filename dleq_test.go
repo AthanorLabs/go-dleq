@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/noot/go-dleq/ed25519"
 	"github.com/noot/go-dleq/secp256k1"
 )
 
@@ -40,11 +41,12 @@ func TestGenerateRingSignature(t *testing.T) {
 }
 
 func TestProveAndVerify(t *testing.T) {
-	curve := secp256k1.NewCurve()
-	x, err := GenerateSecretForCurves(curve, curve)
+	curveA := secp256k1.NewCurve()
+	curveB := ed25519.NewCurve()
+	x, err := GenerateSecretForCurves(curveA, curveB)
 	require.NoError(t, err)
-	proof, err := NewProof(curve, curve, x)
+	proof, err := NewProof(curveA, curveB, x)
 	require.NoError(t, err)
-	err = proof.Verify(curve, curve)
+	err = proof.Verify(curveA, curveB)
 	require.NoError(t, err)
 }
