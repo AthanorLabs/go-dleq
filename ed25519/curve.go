@@ -2,8 +2,10 @@ package ed25519
 
 import (
 	"crypto/rand"
+	"crypto/sha512"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 
 	"github.com/noot/go-dleq/types"
 	"golang.org/x/crypto/sha3"
@@ -126,13 +128,69 @@ func (c *CurveImpl) ScalarMul(s Scalar, p Point) Point {
 }
 
 func (c *CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
-	// TODO
-	return nil, nil
+	ss, ok := s.(*ScalarImpl)
+	if !ok {
+		panic("invalid scalar; type is not *ed25519.ScalarImpl")
+	}
+
+	seed := ss.inner.Bytes()
+
+	h := sha512.Sum512(seed[:])
+	r, err := edwards25519.NewScalar().SetUniformBytes(h[:])
+	if err != nil {
+		return nil, fmt.Errorf("failed to set bytes: %w", err)
+	}
+
+	R := new(edwards25519.Point).ScalarBaseMult(r)
+	A := new(edwards25519.Point).ScalarBaseMult(ss.inner)
+
+	hram := sha512.Sum512(
+		append(append(R.Bytes(), A.Bytes()...), p.Encode()...),
+	)
+
+	ch, err := edwards25519.NewScalar().SetUniformBytes(hram[:])
+	if err != nil {
+		return nil, err
+	}
+
+	cx := new(edwards25519.Scalar).Multiply(ch, ss.inner)
+	sigS := new(edwards25519.Scalar).Add(r, cx)
+	return append(R.Bytes(), sigS.Bytes()...), nil
 }
 
 func (c *CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
-	// TODO
-	return true
+	pp, ok := pubkey.(*PointImpl)
+	if !ok {
+		panic("invalid point; type is not *ed25519.PointImpl")
+	}
+
+	var RBytes [32]byte
+	copy(RBytes[:], sig[:32])
+	var sBytes [32]byte
+	copy(sBytes[:], sig[32:])
+
+	hram := sha512.Sum512(
+		append(append(RBytes[:], pp.inner.Bytes()...), msgPoint.Encode()...),
+	)
+
+	ch, err := edwards25519.NewScalar().SetUniformBytes(hram[:])
+	if err != nil {
+		return false
+	}
+
+	R, err := new(edwards25519.Point).SetBytes(RBytes[:])
+	if err != nil {
+		return false
+	}
+
+	s, err := new(edwards25519.Scalar).SetCanonicalBytes(sBytes[:])
+	if err != nil {
+		return false
+	}
+
+	res := new(edwards25519.Point).VarTimeDoubleScalarBaseMult(new(edwards25519.Scalar).Negate(ch), pp.inner, s)
+	return res.Equal(R) == 1
+
 }
 
 type ScalarImpl struct {
