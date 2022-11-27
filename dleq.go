@@ -24,6 +24,12 @@ type BitProof struct {
 	ringSig                  *RingSignature
 }
 
+type RingSignature struct {
+	eCurveA, eCurveB Scalar
+	a0, a1           Scalar
+	b0, b1           Scalar
+}
+
 func NewProof(curveA, curveB Curve) (*Proof, error) {
 	bits := min(curveA.BitSize(), curveB.BitSize())
 
@@ -95,7 +101,7 @@ func verifyCommitmentsSum(curve Curve, commitments []Commitment, point Point) er
 }
 
 type Commitment struct {
-	blinder    Scalar
+	blinder    Scalar // TODO: remove?
 	commitment Point
 }
 
@@ -171,23 +177,27 @@ func generateCommitments(curve Curve, x []byte, bits uint64) ([]Commitment, erro
 	return commitments, nil
 }
 
-type RingSignature struct {
-	eCurveA, eCurveB Scalar
-	a0, a1           Scalar
-	b0, b1           Scalar
-}
-
 func generateRingSignature(curveA, curveB Curve, x byte, commitmentA, commitmentB Commitment) (*RingSignature, error) {
 	j, k := curveA.NewRandomScalar(), curveB.NewRandomScalar()
 
-	eA, err := hashToScalar(curveA, commitmentA.commitment, commitmentB.commitment,
-		j, curveA.BasePoint(), k, curveB.BasePoint())
+	eA, err := hashToScalar(
+		curveA,
+		commitmentA.commitment,
+		commitmentB.commitment,
+		curveA.ScalarMul(j, curveA.AltBasePoint()),
+		curveB.ScalarMul(k, curveB.AltBasePoint()),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	eB, err := hashToScalar(curveB, commitmentA.commitment, commitmentB.commitment,
-		j, curveA.BasePoint(), k, curveB.BasePoint())
+	eB, err := hashToScalar(
+		curveB,
+		commitmentA.commitment,
+		commitmentB.commitment,
+		curveA.ScalarMul(j, curveA.AltBasePoint()),
+		curveB.ScalarMul(k, curveB.AltBasePoint()),
+	)
 	if err != nil {
 		return nil, err
 	}
