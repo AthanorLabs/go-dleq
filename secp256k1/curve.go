@@ -1,10 +1,11 @@
 package secp256k1
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/noot/go-dleq/types"
-	"github.com/renproject/secp256k1"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -27,11 +28,14 @@ func (c *CurveImpl) BitSize() uint64 {
 }
 
 func (c *CurveImpl) BasePoint() Point {
-	p := &secp256k1.Point{}
-	one := secp256k1.NewFnFromU16(1)
-	p.BaseExp(&one)
+	one := new(secp256k1.ModNScalar)
+	one.SetInt(1)
+
+	point := new(secp256k1.JacobianPoint)
+	secp256k1.ScalarBaseMultNonConst(one, point)
+	point.ToAffine()
 	return &PointImpl{
-		inner: p,
+		inner: point,
 	}
 }
 
@@ -42,37 +46,64 @@ func (*CurveImpl) AltBasePoint() Point {
 		panic(err)
 	}
 
-	p := &secp256k1.Point{}
-	err = p.SetBytes(b)
+	pub, err := secp256k1.ParsePubKey(b)
 	if err != nil {
 		panic(err)
 	}
 
+	point := new(secp256k1.JacobianPoint)
+	pub.AsJacobian(point)
+	point.ToAffine()
 	return &PointImpl{
-		inner: p,
+		inner: point,
 	}
 }
 
 func (c *CurveImpl) NewRandomScalar() Scalar {
-	s := secp256k1.RandomFn()
+	var b [32]byte
+	_, err := rand.Read(b[:])
+	if err != nil {
+		panic(err)
+	}
+
+	s := new(secp256k1.ModNScalar)
+	s.SetBytes(&b)
 	return &ScalarImpl{
-		inner: &s,
+		inner: s,
 	}
 }
 
-func (c *CurveImpl) ScalarFrom(in uint16) Scalar {
-	s := &secp256k1.Fn{}
-	s.SetU16(in)
+func reverse(in [32]byte) [32]byte {
+	rs := [32]byte{}
+	for i := 0; i < 32; i++ {
+		rs[i] = in[32-i-1]
+	}
+	return rs
+}
+
+// ScalarFromBytes sets a Scalar from LE bytes.
+func (c *CurveImpl) ScalarFromBytes(b [32]byte) Scalar {
+	s := new(secp256k1.ModNScalar)
+	// reverse bytes, since SetBytes takes BE bytes
+	in := reverse(b)
+	s.SetBytes(&in)
+	return &ScalarImpl{
+		inner: s,
+	}
+}
+
+func (c *CurveImpl) ScalarFrom(in uint32) Scalar {
+	s := new(secp256k1.ModNScalar)
+	s.SetInt(in)
 	return &ScalarImpl{
 		inner: s,
 	}
 }
 
 func (c *CurveImpl) HashToScalar(in []byte) (Scalar, error) {
-	// TODO: should hash be 32 or 64 bits?
 	h := sha3.Sum256(in)
-	s := &secp256k1.Fn{}
-	_ = s.SetB32(h[:])
+	s := new(secp256k1.ModNScalar)
+	_ = s.SetBytes(&h)
 	return &ScalarImpl{
 		inner: s,
 	}, nil
@@ -84,10 +115,11 @@ func (c *CurveImpl) ScalarBaseMul(s Scalar) Point {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
 	}
 
-	p := &secp256k1.Point{}
-	p.BaseExp(ss.inner)
+	point := new(secp256k1.JacobianPoint)
+	secp256k1.ScalarBaseMultNonConst(ss.inner, point)
+	point.ToAffine()
 	return &PointImpl{
-		inner: p,
+		inner: point,
 	}
 }
 
@@ -102,15 +134,16 @@ func (c *CurveImpl) ScalarMul(s Scalar, p Point) Point {
 		panic("invalid point; type is not *secp256k1.PointImpl")
 	}
 
-	r := &secp256k1.Point{}
-	r.Scale(pp.inner, ss.inner)
+	point := new(secp256k1.JacobianPoint)
+	secp256k1.ScalarMultNonConst(ss.inner, pp.inner, point)
+	point.ToAffine()
 	return &PointImpl{
-		inner: r,
+		inner: point,
 	}
 }
 
 type ScalarImpl struct {
-	inner *secp256k1.Fn
+	inner *secp256k1.ModNScalar
 }
 
 func (s *ScalarImpl) Add(b Scalar) Scalar {
@@ -119,8 +152,7 @@ func (s *ScalarImpl) Add(b Scalar) Scalar {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
 	}
 
-	r := &secp256k1.Fn{}
-	r.Add(s.inner, ss.inner)
+	r := new(secp256k1.ModNScalar).Set(s.inner).Add(ss.inner)
 	return &ScalarImpl{
 		inner: r,
 	}
@@ -132,13 +164,18 @@ func (s *ScalarImpl) Sub(b Scalar) Scalar {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
 	}
 
-	sNeg := &secp256k1.Fn{}
-	sNeg.Negate(ss.inner)
+	sNeg := new(secp256k1.ModNScalar)
+	sNeg.NegateVal(ss.inner)
 
-	r := &secp256k1.Fn{}
-	r.Add(s.inner, sNeg)
+	r := new(secp256k1.ModNScalar).Set(s.inner).Add(sNeg)
 	return &ScalarImpl{
 		inner: r,
+	}
+}
+
+func (s *ScalarImpl) Negate() Scalar {
+	return &ScalarImpl{
+		inner: new(secp256k1.ModNScalar).Set(s.inner).Negate(),
 	}
 }
 
@@ -148,16 +185,15 @@ func (s *ScalarImpl) Mul(b Scalar) Scalar {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
 	}
 
-	r := &secp256k1.Fn{}
-	r.Mul(s.inner, ss.inner)
+	r := new(secp256k1.ModNScalar).Set(s.inner).Mul(ss.inner)
 	return &ScalarImpl{
 		inner: r,
 	}
 }
 
 func (s *ScalarImpl) Inverse() Scalar {
-	r := &secp256k1.Fn{}
-	r.Inverse(s.inner)
+	r := new(secp256k1.ModNScalar)
+	r.Set(s.inner).InverseNonConst()
 	return &ScalarImpl{
 		inner: r,
 	}
@@ -165,7 +201,7 @@ func (s *ScalarImpl) Inverse() Scalar {
 
 func (s *ScalarImpl) Encode() ([]byte, error) {
 	var b [32]byte
-	s.inner.PutB32(b[:])
+	s.inner.PutBytes(&b)
 	return b[:], nil
 }
 
@@ -175,7 +211,7 @@ func (s *ScalarImpl) Eq(other Scalar) bool {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
 	}
 
-	return s.inner.Eq(o.inner)
+	return s.inner.Equals(o.inner)
 }
 
 func (s *ScalarImpl) IsZero() bool {
@@ -183,7 +219,15 @@ func (s *ScalarImpl) IsZero() bool {
 }
 
 type PointImpl struct {
-	inner *secp256k1.Point
+	inner *secp256k1.JacobianPoint
+}
+
+func (p *PointImpl) Copy() Point {
+	r := new(secp256k1.JacobianPoint)
+	r.Set(p.inner)
+	return &PointImpl{
+		inner: r,
+	}
 }
 
 func (p *PointImpl) Add(b Point) Point {
@@ -192,8 +236,9 @@ func (p *PointImpl) Add(b Point) Point {
 		panic("invalid point; type is not *secp256k1.PointImpl")
 	}
 
-	r := &secp256k1.Point{}
-	r.Add(p.inner, pp.inner)
+	r := new(secp256k1.JacobianPoint)
+	secp256k1.AddNonConst(p.inner, pp.inner, r)
+	r.ToAffine()
 	return &PointImpl{
 		inner: r,
 	}
@@ -205,14 +250,15 @@ func (p *PointImpl) Sub(b Point) Point {
 		panic("invalid point; type is not *secp256k1.PointImpl")
 	}
 
-	minusOne := &secp256k1.Fn{}
-	minusOne.SetU16(1)
-	minusOne.Negate(minusOne)
-	minusP := &secp256k1.Point{}
-	minusP.Scale(pp.inner, minusOne)
+	minusOne := new(secp256k1.ModNScalar)
+	minusOne.SetInt(1)
+	minusOne.Negate()
+	minusP := new(secp256k1.JacobianPoint)
+	secp256k1.ScalarMultNonConst(minusOne, pp.inner, minusP)
 
-	r := &secp256k1.Point{}
-	r.Add(p.inner, minusP)
+	r := new(secp256k1.JacobianPoint)
+	secp256k1.AddNonConst(p.inner, minusP, r)
+	r.ToAffine()
 	return &PointImpl{
 		inner: r,
 	}
@@ -224,24 +270,39 @@ func (p *PointImpl) ScalarMul(s Scalar) Point {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
 	}
 
-	r := &secp256k1.Point{}
-	r.Scale(p.inner, ss.inner)
+	r := new(secp256k1.JacobianPoint)
+	secp256k1.ScalarMultNonConst(ss.inner, p.inner, r)
+	r.ToAffine()
 	return &PointImpl{
 		inner: r,
 	}
 }
 
 func (p *PointImpl) Encode() ([]byte, error) {
-	var b [33]byte
-	p.inner.PutBytes(b[:])
-	return b[:], nil
+	p.inner.ToAffine()
+	return secp256k1.NewPublicKey(&p.inner.X, &p.inner.Y).SerializeCompressed(), nil
 }
 
 func (p *PointImpl) IsZero() bool {
-	var empty [33]byte
-	var b [33]byte
-	//zero := &secp256k1.Point{}
-	p.inner.PutBytes(b[:])
-	return empty == b
-	//return p.inner.Eq(zero)
+	zeroFieldVal := new(secp256k1.FieldVal).SetInt(0)
+	zero := secp256k1.NewPublicKey(zeroFieldVal, zeroFieldVal)
+
+	p.inner.ToAffine()
+	pub := secp256k1.NewPublicKey(&p.inner.X, &p.inner.Y)
+	return pub.IsEqual(zero)
+}
+
+func (p *PointImpl) Equals(other Point) bool {
+	pp, ok := other.(*PointImpl)
+	if !ok {
+		panic("invalid point; type is not *secp256k1.PointImpl")
+	}
+
+	p.inner.ToAffine()
+	ppub := secp256k1.NewPublicKey(&p.inner.X, &p.inner.Y)
+
+	pp.inner.ToAffine()
+	otherPub := secp256k1.NewPublicKey(&pp.inner.X, &pp.inner.Y)
+
+	return ppub.IsEqual(otherPub)
 }
