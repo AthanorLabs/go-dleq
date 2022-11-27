@@ -5,9 +5,9 @@ This repo contains an implementation of cross-group discrete logarithm equality 
 ## Usage
 ```go
 import (
-	"github.com/noot/go-dleq"
+    "github.com/noot/go-dleq"
     "github.com/noot/go-dleq/ed25519"
-	"github.com/noot/go-dleq/secp256k1"
+    "github.com/noot/go-dleq/secp256k1"
 )
 
 curveA := secp256k1.NewCurve()
