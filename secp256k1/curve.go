@@ -1,7 +1,9 @@
 package secp256k1
 
 import (
+	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -140,6 +142,42 @@ func (c *CurveImpl) ScalarMul(s Scalar, p Point) Point {
 	return &PointImpl{
 		inner: point,
 	}
+}
+
+// Sign accepts a private key `s` and signs the encoded point `p`.
+func (c *CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
+	ss, ok := s.(*ScalarImpl)
+	if !ok {
+		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
+	}
+
+	sk := secp256k1.NewPrivateKey(ss.inner)
+	key := sk.ToECDSA()
+	msg, err := p.Encode()
+	if err != nil {
+		return nil, err
+	}
+
+	hash := sha256.Sum256(msg)
+	return ecdsa.SignASN1(rand.Reader, key, hash[:])
+}
+
+func (c *CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
+	pp, ok := pubkey.(*PointImpl)
+	if !ok {
+		panic("invalid point; type is not *secp256k1.PointImpl")
+	}
+
+	pp.inner.ToAffine()
+	pub := secp256k1.NewPublicKey(&pp.inner.X, &pp.inner.Y)
+
+	msg, err := msgPoint.Encode()
+	if err != nil {
+		return false
+	}
+
+	hash := sha256.Sum256(msg)
+	return ecdsa.VerifyASN1(pub.ToECDSA(), hash[:], sig)
 }
 
 type ScalarImpl struct {

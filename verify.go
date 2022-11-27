@@ -27,6 +27,17 @@ func (p *Proof) Verify(curveA, curveB Curve) error {
 		return fmt.Errorf("failed to verify commitment on curve B: %w", err)
 	}
 
+	// verify signatures
+	ok := curveA.Verify(p.CommitmentA, p.CommitmentA, p.signatureA.inner)
+	if !ok {
+		return fmt.Errorf("failed to verify signature on commitment A")
+	}
+
+	ok = curveB.Verify(p.CommitmentB, p.CommitmentB, p.signatureB.inner)
+	if !ok {
+		return fmt.Errorf("failed to verify signature on commitment B")
+	}
+
 	// now calculate challenges and verify
 	bits := min(curveA.BitSize(), curveB.BitSize())
 	for i := uint64(0); i < bits; i++ {

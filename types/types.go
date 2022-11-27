@@ -10,6 +10,8 @@ type Curve interface {
 	HashToScalar([]byte) (Scalar, error)
 	ScalarBaseMul(Scalar) Point
 	ScalarMul(Scalar, Point) Point
+	Sign(s Scalar, p Point) ([]byte, error)
+	Verify(pubkey, msgPoint Point, sig []byte) bool
 }
 
 type Scalar interface {

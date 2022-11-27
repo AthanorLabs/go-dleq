@@ -16,6 +16,11 @@ type Scalar = types.Scalar
 type Proof struct {
 	CommitmentA, CommitmentB Point
 	proofs                   []BitProof
+	signatureA, signatureB   Signature
+}
+
+type Signature struct {
+	inner []byte
 }
 
 // BitProof represents the proof for 1 bit of the witness.
@@ -39,8 +44,10 @@ func NewProof(curveA, curveB Curve) (*Proof, error) {
 		return nil, err
 	}
 
-	xA := curveA.ScalarBaseMul(curveA.ScalarFromBytes(x))
-	xB := curveB.ScalarBaseMul(curveB.ScalarFromBytes(x))
+	xA := curveA.ScalarFromBytes(x)
+	xB := curveB.ScalarFromBytes(x)
+	XA := curveA.ScalarBaseMul(xA)
+	XB := curveB.ScalarBaseMul(xB)
 
 	// generate commitments for each curve
 	commitmentsA, err := generateCommitments(curveA, x[:], bits)
@@ -48,12 +55,17 @@ func NewProof(curveA, curveB Curve) (*Proof, error) {
 		return nil, err
 	}
 
-	err = verifyCommitmentsSum(curveA, commitmentsA, xA)
+	err = verifyCommitmentsSum(curveA, commitmentsA, XA)
 	if err != nil {
 		return nil, err
 	}
 
 	commitmentsB, err := generateCommitments(curveB, x[:], bits)
+	if err != nil {
+		return nil, err
+	}
+
+	err = verifyCommitmentsSum(curveB, commitmentsB, XB)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +86,26 @@ func NewProof(curveA, curveB Curve) (*Proof, error) {
 		}
 	}
 
+	sigA, err := curveA.Sign(xA, XA)
+	if err != nil {
+		return nil, err
+	}
+
+	sigB, err := curveB.Sign(xB, XB)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Proof{
-		CommitmentA: xA,
-		CommitmentB: xB,
+		CommitmentA: XA,
+		CommitmentB: XB,
 		proofs:      proofs,
+		signatureA: Signature{
+			sigA,
+		},
+		signatureB: Signature{
+			sigB,
+		},
 	}, nil
 }
 
