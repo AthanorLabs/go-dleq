@@ -26,18 +26,20 @@ type signature struct {
 // bitProof represents the proof for 1 bit of the witness.
 type bitProof struct {
 	commitmentA, commitmentB commitment
-	ringSig                  *ringSignature
+	ringSig                  ringSignature
 }
 
 type commitment struct {
+	// note: the blinder is only needed for proof construction,
+	// it's not used for verification or included in a serialized proof.
 	blinder    Scalar
 	commitment Point
 }
 
 type ringSignature struct {
 	eCurveA, eCurveB Scalar
-	a0, a1           Scalar
-	b0, b1           Scalar
+	a0, a1           Scalar // in A
+	b0, b1           Scalar // in B
 }
 
 // GenerateSecretForCurves generates a secret value that has a corresponding
@@ -89,7 +91,7 @@ func NewProof(curveA, curveB Curve, x [32]byte) (*Proof, error) {
 		proofs[i] = bitProof{
 			commitmentA: commitmentsA[i],
 			commitmentB: commitmentsB[i],
-			ringSig:     ringSig,
+			ringSig:     *ringSig,
 		}
 	}
 

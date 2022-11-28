@@ -5,6 +5,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/noot/go-dleq/types"
@@ -25,6 +26,40 @@ func NewCurve() Curve {
 
 func (c *CurveImpl) BitSize() uint64 {
 	return 252
+}
+
+func (c *CurveImpl) CompressedPointSize() int {
+	return 32
+}
+
+func (c *CurveImpl) DecodeToPoint(in []byte) (Point, error) {
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	p, err := new(edwards25519.Point).SetBytes(cp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PointImpl{
+		inner: p,
+	}, nil
+}
+
+func (c *CurveImpl) DecodeToScalar(in []byte) (Scalar, error) {
+	if len(in) != 32 {
+		return nil, errors.New("invalid scalar length")
+	}
+
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	s, err := new(edwards25519.Scalar).SetCanonicalBytes(cp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ScalarImpl{
+		inner: s,
+	}, nil
 }
 
 func (c *CurveImpl) BasePoint() Point {

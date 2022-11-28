@@ -2,6 +2,7 @@ package types
 
 type Curve interface {
 	BitSize() uint64
+	CompressedPointSize() int
 	BasePoint() Point
 	AltBasePoint() Point
 	NewRandomScalar() Scalar
@@ -12,6 +13,11 @@ type Curve interface {
 	ScalarMul(Scalar, Point) Point
 	Sign(s Scalar, p Point) ([]byte, error)
 	Verify(pubkey, msgPoint Point, sig []byte) bool
+
+	// the following two functions MUST copy the byte slice
+	// before decoding.
+	DecodeToPoint([]byte) (Point, error)
+	DecodeToScalar([]byte) (Scalar, error)
 }
 
 type Scalar interface {

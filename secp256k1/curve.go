@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 
 	"github.com/noot/go-dleq/types"
 
@@ -28,6 +29,40 @@ func NewCurve() Curve {
 
 func (c *CurveImpl) BitSize() uint64 {
 	return 255
+}
+
+func (c *CurveImpl) CompressedPointSize() int {
+	return 33
+}
+
+func (c *CurveImpl) DecodeToPoint(in []byte) (Point, error) {
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	pub, err := secp256k1.ParsePubKey(cp)
+	if err != nil {
+		return nil, err
+	}
+
+	r := new(secp256k1.JacobianPoint)
+	pub.AsJacobian(r)
+	r.ToAffine()
+	return &PointImpl{
+		inner: r,
+	}, nil
+}
+
+func (c *CurveImpl) DecodeToScalar(in []byte) (Scalar, error) {
+	if len(in) != 32 {
+		return nil, errors.New("invalid scalar length")
+	}
+
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	s := new(secp256k1.ModNScalar)
+	_ = s.SetByteSlice(cp)
+	return &ScalarImpl{
+		inner: s,
+	}, nil
 }
 
 func (c *CurveImpl) BasePoint() Point {
