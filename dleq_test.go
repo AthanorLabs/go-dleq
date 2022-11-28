@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/noot/go-dleq/ed25519"
-	"github.com/noot/go-dleq/secp256k1"
+	"github.com/athanorlabs/go-dleq/ed25519"
+	"github.com/athanorlabs/go-dleq/secp256k1"
 )
 
 func TestGenerateCommitments(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/noot/go-dleq/types"
+	"github.com/athanorlabs/go-dleq/types"
 )
 
 var errInputBytesTooShort = errors.New("input bytes too short")

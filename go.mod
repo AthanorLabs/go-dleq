@@ -1,4 +1,4 @@
-module github.com/noot/go-dleq
+module github.com/athanorlabs/go-dleq
 
 go 1.17
 

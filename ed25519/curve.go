@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/noot/go-dleq/types"
+	"github.com/athanorlabs/go-dleq/types"
 	"golang.org/x/crypto/sha3"
 
 	"filippo.io/edwards25519"
