@@ -44,4 +44,5 @@ func TestProof_Serde(t *testing.T) {
 
 	err = deser.Verify(curveA, curveB)
 	require.NoError(t, err)
+	t.Logf("size of serialized proof: %d bytes", len(ser))
 }
