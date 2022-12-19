@@ -50,8 +50,15 @@ func GenerateSecretForCurves(curveA, curveB Curve) ([32]byte, error) {
 }
 
 // NewProof returns a new proof for the given secret on the given curves.
+// The witness x must be in little-endian and smaller than the minimum order
+// of the two curves.
 func NewProof(curveA, curveB Curve, x [32]byte) (*Proof, error) {
 	bits := min(curveA.BitSize(), curveB.BitSize())
+
+	err := checkWitnessSize(x, bits)
+	if err != nil {
+		return nil, err
+	}
 
 	xA := curveA.ScalarFromBytes(x)
 	xB := curveB.ScalarFromBytes(x)
@@ -116,6 +123,29 @@ func NewProof(curveA, curveB Curve, x [32]byte) (*Proof, error) {
 			sigB,
 		},
 	}, nil
+}
+
+func checkWitnessSize(x [32]byte, bits uint64) error {
+	// number of leading bits that should be cleared
+	cleared := 256 - bits
+
+	// zero out bits that don't have to be zero
+	bitmask := byte(0xff) << (8 - cleared%8)
+	if x[bits/8]&bitmask != 0 {
+		return fmt.Errorf("secret must be under %d bits", bits)
+	}
+
+	if cleared/8 == 0 {
+		return nil
+	}
+
+	for _, b := range x[(bits/8)+1:] {
+		if b != 0 {
+			return fmt.Errorf("secret must be under %d bits", bits)
+		}
+	}
+
+	return nil
 }
 
 // verifyCommitmentsSum verifies that all the commitments sum to the given point.
