@@ -18,57 +18,17 @@ type Curve = types.Curve
 type Point = types.Point
 type Scalar = types.Scalar
 
-type CurveImpl struct{}
+type CurveImpl struct {
+	altBasePoint Point
+}
 
 func NewCurve() Curve {
-	return &CurveImpl{}
-}
-
-func (c *CurveImpl) BitSize() uint64 {
-	return 252
-}
-
-func (c *CurveImpl) CompressedPointSize() int {
-	return 32
-}
-
-func (c *CurveImpl) DecodeToPoint(in []byte) (Point, error) {
-	cp := make([]byte, len(in))
-	copy(cp, in)
-	p, err := new(edwards25519.Point).SetBytes(cp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &PointImpl{
-		inner: p,
-	}, nil
-}
-
-func (c *CurveImpl) DecodeToScalar(in []byte) (Scalar, error) {
-	if len(in) != 32 {
-		return nil, errors.New("invalid scalar length")
-	}
-
-	cp := make([]byte, len(in))
-	copy(cp, in)
-	s, err := new(edwards25519.Scalar).SetCanonicalBytes(cp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ScalarImpl{
-		inner: s,
-	}, nil
-}
-
-func (c *CurveImpl) BasePoint() Point {
-	return &PointImpl{
-		inner: edwards25519.NewGeneratorPoint(),
+	return &CurveImpl{
+		altBasePoint: altBasePoint(),
 	}
 }
 
-func (c *CurveImpl) AltBasePoint() Point {
+func altBasePoint() Point {
 	const str = "8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94"
 	b, err := hex.DecodeString(str)
 	if err != nil {
@@ -85,7 +45,55 @@ func (c *CurveImpl) AltBasePoint() Point {
 	}
 }
 
-func (c *CurveImpl) NewRandomScalar() Scalar {
+func (*CurveImpl) BitSize() uint64 {
+	return 252
+}
+
+func (*CurveImpl) CompressedPointSize() int {
+	return 32
+}
+
+func (*CurveImpl) DecodeToPoint(in []byte) (Point, error) {
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	p, err := new(edwards25519.Point).SetBytes(cp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PointImpl{
+		inner: p,
+	}, nil
+}
+
+func (*CurveImpl) DecodeToScalar(in []byte) (Scalar, error) {
+	if len(in) != 32 {
+		return nil, errors.New("invalid scalar length")
+	}
+
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	s, err := new(edwards25519.Scalar).SetCanonicalBytes(cp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ScalarImpl{
+		inner: s,
+	}, nil
+}
+
+func (*CurveImpl) BasePoint() Point {
+	return &PointImpl{
+		inner: edwards25519.NewGeneratorPoint(),
+	}
+}
+
+func (c *CurveImpl) AltBasePoint() Point {
+	return c.altBasePoint
+}
+
+func (*CurveImpl) NewRandomScalar() Scalar {
 	var b [64]byte
 	_, err := rand.Read(b[:])
 	if err != nil {
@@ -102,7 +110,7 @@ func (c *CurveImpl) NewRandomScalar() Scalar {
 	}
 }
 
-func (c *CurveImpl) ScalarFromBytes(b [32]byte) Scalar {
+func (*CurveImpl) ScalarFromBytes(b [32]byte) Scalar {
 	s, err := new(edwards25519.Scalar).SetCanonicalBytes(b[:])
 	if err != nil {
 		panic(err)
@@ -123,7 +131,7 @@ func (c *CurveImpl) ScalarFromInt(in uint32) Scalar {
 	return c.ScalarFromBytes(bFull)
 }
 
-func (c *CurveImpl) HashToScalar(in []byte) (Scalar, error) {
+func (*CurveImpl) HashToScalar(in []byte) (Scalar, error) {
 	h := sha3.Sum512(in)
 	s, err := new(edwards25519.Scalar).SetUniformBytes(h[:])
 	if err != nil {
@@ -135,7 +143,7 @@ func (c *CurveImpl) HashToScalar(in []byte) (Scalar, error) {
 	}, nil
 }
 
-func (c *CurveImpl) ScalarBaseMul(s Scalar) Point {
+func (*CurveImpl) ScalarBaseMul(s Scalar) Point {
 	ss, ok := s.(*ScalarImpl)
 	if !ok {
 		panic("invalid scalar; type is not *ed25519.ScalarImpl")
@@ -146,7 +154,7 @@ func (c *CurveImpl) ScalarBaseMul(s Scalar) Point {
 	}
 }
 
-func (c *CurveImpl) ScalarMul(s Scalar, p Point) Point {
+func (*CurveImpl) ScalarMul(s Scalar, p Point) Point {
 	ss, ok := s.(*ScalarImpl)
 	if !ok {
 		panic("invalid scalar; type is not *ed25519.ScalarImpl")
@@ -162,7 +170,7 @@ func (c *CurveImpl) ScalarMul(s Scalar, p Point) Point {
 	}
 }
 
-func (c *CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
+func (*CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
 	ss, ok := s.(*ScalarImpl)
 	if !ok {
 		panic("invalid scalar; type is not *ed25519.ScalarImpl")
@@ -193,7 +201,7 @@ func (c *CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
 	return append(R.Bytes(), sigS.Bytes()...), nil
 }
 
-func (c *CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
+func (*CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
 	pp, ok := pubkey.(*PointImpl)
 	if !ok {
 		panic("invalid point; type is not *ed25519.PointImpl")
@@ -225,7 +233,6 @@ func (c *CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
 
 	res := new(edwards25519.Point).VarTimeDoubleScalarBaseMult(new(edwards25519.Scalar).Negate(ch), pp.inner, s)
 	return res.Equal(R) == 1
-
 }
 
 type ScalarImpl struct {

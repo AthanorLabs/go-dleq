@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"math/big"
 
 	"github.com/athanorlabs/go-dleq/types"
 
@@ -21,51 +22,26 @@ var _ Curve = &CurveImpl{}
 var _ Scalar = &ScalarImpl{}
 var _ Point = &PointImpl{}
 
-type CurveImpl struct{}
+type CurveImpl struct {
+	order        *big.Int
+	basePoint    Point
+	altBasePoint Point
+}
 
 func NewCurve() Curve {
-	return &CurveImpl{}
-}
-
-func (c *CurveImpl) BitSize() uint64 {
-	return 255
-}
-
-func (c *CurveImpl) CompressedPointSize() int {
-	return 33
-}
-
-func (c *CurveImpl) DecodeToPoint(in []byte) (Point, error) {
-	cp := make([]byte, len(in))
-	copy(cp, in)
-	pub, err := secp256k1.ParsePubKey(cp)
+	orderBytes, err := hex.DecodeString("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	r := new(secp256k1.JacobianPoint)
-	pub.AsJacobian(r)
-	r.ToAffine()
-	return &PointImpl{
-		inner: r,
-	}, nil
-}
-
-func (c *CurveImpl) DecodeToScalar(in []byte) (Scalar, error) {
-	if len(in) != 32 {
-		return nil, errors.New("invalid scalar length")
+	return &CurveImpl{
+		order:        new(big.Int).SetBytes(orderBytes),
+		basePoint:    basePoint(),
+		altBasePoint: altBasePoint(),
 	}
-
-	cp := make([]byte, len(in))
-	copy(cp, in)
-	s := new(secp256k1.ModNScalar)
-	_ = s.SetByteSlice(cp)
-	return &ScalarImpl{
-		inner: s,
-	}, nil
 }
 
-func (c *CurveImpl) BasePoint() Point {
+func basePoint() Point {
 	one := new(secp256k1.ModNScalar)
 	one.SetInt(1)
 
@@ -77,7 +53,7 @@ func (c *CurveImpl) BasePoint() Point {
 	}
 }
 
-func (*CurveImpl) AltBasePoint() Point {
+func altBasePoint() Point {
 	const str = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0"
 	b, err := hex.DecodeString(str)
 	if err != nil {
@@ -97,7 +73,53 @@ func (*CurveImpl) AltBasePoint() Point {
 	}
 }
 
-func (c *CurveImpl) NewRandomScalar() Scalar {
+func (*CurveImpl) BitSize() uint64 {
+	return 255
+}
+
+func (*CurveImpl) CompressedPointSize() int {
+	return 33
+}
+
+func (*CurveImpl) DecodeToPoint(in []byte) (Point, error) {
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	pub, err := secp256k1.ParsePubKey(cp)
+	if err != nil {
+		return nil, err
+	}
+
+	r := new(secp256k1.JacobianPoint)
+	pub.AsJacobian(r)
+	r.ToAffine()
+	return &PointImpl{
+		inner: r,
+	}, nil
+}
+
+func (*CurveImpl) DecodeToScalar(in []byte) (Scalar, error) {
+	if len(in) != 32 {
+		return nil, errors.New("invalid scalar length")
+	}
+
+	cp := make([]byte, len(in))
+	copy(cp, in)
+	s := new(secp256k1.ModNScalar)
+	_ = s.SetByteSlice(cp)
+	return &ScalarImpl{
+		inner: s,
+	}, nil
+}
+
+func (c *CurveImpl) BasePoint() Point {
+	return c.basePoint
+}
+
+func (c *CurveImpl) AltBasePoint() Point {
+	return c.altBasePoint
+}
+
+func (*CurveImpl) NewRandomScalar() Scalar {
 	var b [32]byte
 	_, err := rand.Read(b[:])
 	if err != nil {
@@ -120,7 +142,7 @@ func reverse(in [32]byte) [32]byte {
 }
 
 // ScalarFromBytes sets a Scalar from LE bytes.
-func (c *CurveImpl) ScalarFromBytes(b [32]byte) Scalar {
+func (*CurveImpl) ScalarFromBytes(b [32]byte) Scalar {
 	s := new(secp256k1.ModNScalar)
 	// reverse bytes, since SetBytes takes BE bytes
 	in := reverse(b)
@@ -130,7 +152,7 @@ func (c *CurveImpl) ScalarFromBytes(b [32]byte) Scalar {
 	}
 }
 
-func (c *CurveImpl) ScalarFromInt(in uint32) Scalar {
+func (*CurveImpl) ScalarFromInt(in uint32) Scalar {
 	s := new(secp256k1.ModNScalar)
 	s.SetInt(in)
 	return &ScalarImpl{
@@ -139,15 +161,24 @@ func (c *CurveImpl) ScalarFromInt(in uint32) Scalar {
 }
 
 func (c *CurveImpl) HashToScalar(in []byte) (Scalar, error) {
-	h := sha3.Sum256(in)
+	h := sha3.Sum512(in)
+	n := new(big.Int).SetBytes(h[:])
+	n = new(big.Int).Mod(n, c.order)
+	var reduced [32]byte
+	copy(reduced[:], n.Bytes())
+
 	s := new(secp256k1.ModNScalar)
-	_ = s.SetBytes(&h)
+	wasReduced := s.SetBytes(&reduced)
+	if wasReduced != 0 {
+		panic("hash should not be reduced twice")
+	}
+
 	return &ScalarImpl{
 		inner: s,
 	}, nil
 }
 
-func (c *CurveImpl) ScalarBaseMul(s Scalar) Point {
+func (*CurveImpl) ScalarBaseMul(s Scalar) Point {
 	ss, ok := s.(*ScalarImpl)
 	if !ok {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
@@ -161,7 +192,7 @@ func (c *CurveImpl) ScalarBaseMul(s Scalar) Point {
 	}
 }
 
-func (c *CurveImpl) ScalarMul(s Scalar, p Point) Point {
+func (*CurveImpl) ScalarMul(s Scalar, p Point) Point {
 	ss, ok := s.(*ScalarImpl)
 	if !ok {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
@@ -181,7 +212,7 @@ func (c *CurveImpl) ScalarMul(s Scalar, p Point) Point {
 }
 
 // Sign accepts a private key `s` and signs the encoded point `p`.
-func (c *CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
+func (*CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
 	ss, ok := s.(*ScalarImpl)
 	if !ok {
 		panic("invalid scalar; type is not *secp256k1.ScalarImpl")
@@ -194,7 +225,7 @@ func (c *CurveImpl) Sign(s Scalar, p Point) ([]byte, error) {
 	return ecdsa.SignASN1(rand.Reader, key, hash[:])
 }
 
-func (c *CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
+func (*CurveImpl) Verify(pubkey, msgPoint Point, sig []byte) bool {
 	pp, ok := pubkey.(*PointImpl)
 	if !ok {
 		panic("invalid point; type is not *secp256k1.PointImpl")
