@@ -319,11 +319,13 @@ type PointImpl struct {
 	inner *secp256k1.JacobianPoint
 }
 
-func NewPointFromCoordinates(x, y secp256k1.FieldVal) Point {
+func NewPointFromCoordinates(x, y secp256k1.FieldVal) *PointImpl {
+	one := new(secp256k1.FieldVal).SetInt(1)
 	return &PointImpl{
 		inner: &secp256k1.JacobianPoint{
 			X: x,
 			Y: y,
+			Z: *one,
 		},
 	}
 }
