@@ -319,6 +319,15 @@ type PointImpl struct {
 	inner *secp256k1.JacobianPoint
 }
 
+func NewPointFromCoordinates(x, y secp256k1.FieldVal) Point {
+	return &PointImpl{
+		inner: &secp256k1.JacobianPoint{
+			X: x,
+			Y: y,
+		},
+	}
+}
+
 func (p *PointImpl) Copy() Point {
 	r := new(secp256k1.JacobianPoint)
 	r.Set(p.inner)
