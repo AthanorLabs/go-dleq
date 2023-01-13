@@ -304,6 +304,12 @@ type PointImpl struct {
 	inner *edwards25519.Point
 }
 
+func NewPoint(inner *edwards25519.Point) *PointImpl {
+	return &PointImpl{
+		inner: inner,
+	}
+}
+
 func (p *PointImpl) Copy() Point {
 	return &PointImpl{
 		inner: new(edwards25519.Point).Set(p.inner),
